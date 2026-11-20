@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Исследование выбора партнера</title>
+  <style>
+    :root { color-scheme: light; --background: #f2f2f2; --ink: #222; --muted: #595959; --experiment-unit: min(100vh, 110vw); --face-height: calc(var(--experiment-unit) * .4); }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--background); color: var(--ink); font: 16px/1.6 Arial, Helvetica, sans-serif; }
+    main { width: min(680px, calc(100% - 40px)); margin: 64px auto; }
+    .panel { background: #fff; border: 1px solid #ccc; padding: 32px 36px; }
+    h1 { margin: 0 0 20px; font-size: 25px; font-weight: 500; line-height: 1.3; }
+    h2 { font-size: 19px; font-weight: 500; }
+    p { margin: 0 0 18px; }
+    .muted, .help { color: var(--muted); }
+    .help { font-size: 14px; margin-top: 6px; }
+    label { display: block; margin: 20px 0 6px; }
+    input, select { width: 100%; padding: 10px 12px; border: 1px solid #999; border-radius: 0; background: #fff; color: var(--ink); font: inherit; }
+    button { padding: 10px 20px; border: 1px solid #777; border-radius: 0; background: #e8e8e8; color: var(--ink); font: inherit; cursor: pointer; }
+    button:hover { background: #ddd; }
+    button:disabled { cursor: default; opacity: .55; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #222; outline-offset: 3px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+    .error { color: #222; border-left: 3px solid #222; padding-left: 12px; margin-top: 18px; }
+    .rule { margin: 24px 0; border-top: 1px solid #ddd; }
+    ul { padding-left: 23px; }
+    li { margin: 8px 0; }
+    #task { position: fixed; inset: 0; background: var(--background); overflow: auto; scrollbar-gutter: stable both-edges; }
+    #trial-count { position:absolute;top:20px;left:24px;font-size:clamp(16px,2vh,20px);font-weight:500;line-height:1.2;color:#111; }
+    /* Centre only the square; the heading above it never changes the fixation alignment. */
+    #gallery-stage { position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:calc(var(--experiment-unit) * .72);height:calc(var(--experiment-unit) * .72); }
+    #gallery-count { position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);margin:0;white-space:nowrap;font-size:clamp(24px,3.4vh,34px);font-weight:500;line-height:1.2;color:#111; }
+    #gallery { position:absolute;inset:0;width:100%;height:100%;border:1px solid #aaa;background:#ddd; }
+    .gallery-grid { display:grid;width:100%;height:100%;grid-template-columns:repeat(var(--columns),minmax(0,1fr));grid-template-rows:repeat(var(--rows),minmax(0,1fr));gap:0;padding:0; }
+    .gallery-tile { position:relative;overflow:hidden;min-width:0;min-height:0;background:#ddd; }
+    .gallery-tile img { width:100%;height:100%;object-fit:cover;display:block; }
+    .gallery-tile::before { content:"";position:absolute;inset:0;border:1px solid #888;pointer-events:none; }
+    .gallery-tile.current::after { content:"";position:absolute;inset:0;border:4px solid #000;pointer-events:none; }
+    .gallery-empty { background:#ddd; }
+    /* Both stimuli share this exact viewport-centred origin. The scale cannot move it. */
+    #stimulus { position: absolute; left: 50%; top: 50%; width: calc(var(--face-height) * .75); height: var(--face-height); transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; }
+    #face { display: block; width: 100%; height: 100%; object-fit: contain; }
+    #fixation { font: calc(var(--experiment-unit) * .05)/1 Arial, Helvetica, sans-serif; color: #111; }
+    /* As in the original: face .3 x .4 screen-height units, text .05, scale steps .1. */
+    #response { position: absolute; top: calc(50% + var(--face-height) / 2 + var(--experiment-unit) * .025); left: 50%; transform: translateX(-50%); width: min(calc(var(--experiment-unit) * 1.1), calc(100% - 28px)); text-align: center; }
+    #response p { margin: 0 0 calc(var(--experiment-unit) * .03); font-size: calc(var(--experiment-unit) * .05); line-height: 1.2; }
+    #scale { display: flex; justify-content: center; gap: calc(var(--experiment-unit) * .035); }
+    .rating { padding: 0; flex: 0 0 auto; width: calc(var(--experiment-unit) * .065); height: calc(var(--experiment-unit) * .065); border: 2px solid transparent; background: transparent; font-size: calc(var(--experiment-unit) * .05); line-height: 1; color: #111; }
+    .rating:hover, .rating:disabled { background: transparent; opacity: 1; }
+    .rating.selected { border-color: #000; background: transparent; }
+    .rating:focus { outline: none; }
+    .rating:focus-visible { outline: 1px dotted #666; outline-offset: 3px; }
+    .anchors { display: flex; justify-content: space-between; margin: calc(var(--experiment-unit) * .01) auto 0; max-width: calc(var(--experiment-unit) * .9); color: var(--muted); font-size: calc(var(--experiment-unit) * .03); line-height: 1.15; }
+    .anchors span:first-child { text-align: left; }
+    .anchors span:last-child { text-align: right; }
+    #pause { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: var(--background); padding: 20px; }
+    #pause .panel { width: min(540px, 100%); }
+    .group-sizes { display:flex;gap:24px;text-align:center;margin:28px 0; }
+    .group-sizes > div { flex:1; }
+    .group-sizes strong { display:block;font-size:36px;font-weight:500;margin-top:12px; }
+    #binary-scale { display:flex;justify-content:center;gap:calc(var(--experiment-unit) * .1); }
+    .binary-choice { padding:0;width:calc(var(--experiment-unit) * .24);height:calc(var(--experiment-unit) * .065);border:2px solid transparent;background:transparent;font-size:calc(var(--experiment-unit) * .05);line-height:1;color:#111; }
+    .binary-choice:hover,.binary-choice:disabled { background:transparent;opacity:1; }
+    .binary-choice.selected { border-color:#000; }
+    #response #binary-help { margin:calc(var(--experiment-unit) * .02) 0 0;font-size:calc(var(--experiment-unit) * .028); }
+    code { font-size: 14px; overflow-wrap: anywhere; }
+    #setup-status { white-space: pre-line; }
+    @media (max-width: 520px) { main { margin: 24px auto; } .panel { padding: 24px; } }
+  </style>
+</head>
+<body>
+  <main id="pages">
+    <section id="registration" class="panel">
+      <h1>Исследование выбора партнера</h1>
+      <p>Пожалуйста, укажите Ваш пол, чтобы продолжить.</p>
+      <div id="preview-controls" hidden>
+        <h2>Локальная проверка</h2>
+        <p class="help">Тестирование без сервера. Ответы остаются на этом устройстве.</p>
+        <div id="preview-order-field" hidden>
+          <label for="preview-order">Порядок основных блоков</label>
+          <select id="preview-order"><option value="forward">20 / 80</option><option value="reverse">80 / 20</option></select>
+        </div>
+        <div class="rule"></div>
+      </div>
+      <form id="participant-form">
+        <label for="gender">Пол</label>
+        <select id="gender" name="gender" required>
+          <option value="">Выберите вариант</option>
+          <option value="male">Мужской</option><option value="female">Женский</option>
+        </select>
+        <div class="actions"><button type="submit">Продолжить</button></div>
+      </form>
+    </section>
+    <section id="instructions" class="panel" hidden>
+      <h1>Инструкция</h1>
+      <p>Спасибо, что решили принять участие в нашем исследовании!</p>
+      <p>Мы изучаем поведение людей в дейтинговых сервисах, результаты исследования могут использоваться для разработки приложений для дейтинга с использованием нейросетей, корректирующей демонстрацию анкет, основываясь на выборах человека.</p>
+      <p>Вам предстоит выбрать партнера для встречи. Для этого оцените привлекательность человека на фото при помощи клавиш 1-7 и ответьте на вопрос «У Вас есть желание познакомиться с этим человеком?» (нет - 1 или да - 2).</p>
+      <p>По окончанию исследования вы получите контакты нескольких людей с которыми у вас случился метч из одного случайно выбранного экспериментального блока.</p>
+      <p>Для продолжения нажмите ПРОБЕЛ</p>
+      <div class="actions"><button id="instructions-continue">Продолжить</button></div>
+    </section>
+
+    <section id="practice-ready" class="panel" hidden>
+      <h1>Начало тестового блока</h1>
+      <p>Для того чтобы ознакомится с процедурой исследования вы пройдете несколько тестовых проб с изображениями людей сгенерированных с помощью нейросетей</p>
+      <p>Для старта тестового блока нажмите ПРОБЕЛ</p>
+      <p id="loading-status" class="muted" role="status">Подготовка фотографий…</p>
+      <div class="actions"><button id="start" disabled>Начать тестовый блок</button></div>
+    </section>
+    <section id="allocation" class="panel" hidden>
+      <p>Для репликации эксперимента, компьютер случайным образом разделил людей для вас на 2 группы</p>
+      <div class="group-sizes"><div>Размер первой группы:<strong id="group-size-first"></strong></div><div>Размер второй группы:<strong id="group-size-second"></strong></div></div>
+      <p>Для продолжения нажмите ПРОБЕЛ</p>
+      <div class="actions"><button id="allocation-continue">Продолжить</button></div>
+    </section>
+    <section id="main-ready" class="panel" hidden>
+      <h1 id="main-heading">Начало блока эксперимента</h1>
+      <p id="group-transition" lang="ru" hidden>Теперь вы увидите другую группу участников.</p>
+      <p id="main-description"></p>
+      <p>Вы получите контакты нескольких людей только из одного случайно выбранного блока.</p>
+      <p>Для старта нажмите ПРОБЕЛ</p>
+      <div class="actions"><button id="main-start">Начать блок</button></div>
+    </section>
+    <section id="complete" class="panel" hidden>
+      <h1>Спасибо за участие</h1>
+      <p id="completion-message">Вы завершили исследование.</p>
+      <p id="save-status" role="status"></p>
+      <div class="actions"><button id="download-csv">Сохранить ответы (CSV)</button><button id="download-json">Сохранить ответы (JSON)</button><button id="retry-submit" hidden>Повторить сохранение</button></div>
+    </section>
+    <!-- Researcher-only setup: open Index.html#setup. Never shown in the participant flow. -->
+    <section id="setup" class="panel" hidden>
+      <h1>Настройка исследования</h1>
+      <p>На GitHub Pages имена файлов в открытом репозитории определяются автоматически. Фотографии должны находиться в папке faces рядом с Index.html. Схема папок приведена в README.md.</p>
+      <p>Для работы без автоматического поиска выберите всю папку faces. Каталог с именами файлов будет встроен в HTML. Содержимое фотографий в HTML не встраивается.</p>
+      <label for="catalogue-input">Папка faces</label>
+      <button id="choose-catalogue" type="button">Выбрать папку</button>
+        <input id="catalogue-input" hidden type="file" webkitdirectory directory multiple accept="image/*">
+      <label for="submission-url">Адрес веб-приложения Google Apps Script</label>
+      <input id="submission-url" type="url" placeholder="https://script.google.com/macros/s/ID/exec">
+      <p class="help">Опубликуйте поставляемый Code.gs и вставьте адрес /exec. Основная версия использует сервер для чередования блоков и сохранения ответов. Тестовые версии не обращаются к таблице.</p>
+      <p id="setup-status" class="help" role="status"></p>
+      <div class="actions"><button id="build-index" disabled>Скачать настроенный Index.html</button><button id="preview">Вернуться к началу</button></div>
+      <p class="help">Если каталог недоступен, проверяются файлы 001.jpg, 002.jpg и далее. Отсутствующие фотографии заменяются пронумерованными заглушками и помечаются в данных.</p>
+    </section>
+  </main>
+  <section id="task" aria-label="Оценка фотографий" hidden>
+    <div id="trial-count" hidden></div>
+    <div id="gallery-stage" hidden>
+      <div id="gallery-count" aria-label="Номер фотографии в группе"></div>
+      <div id="gallery" aria-label="Обзор текущей группы" hidden></div>
+    </div>
+    <div id="stimulus"><span id="fixation" aria-label="Фиксационный крест">+</span><img id="face" alt="Фотография для оценки" hidden></div>
+    <div id="response" hidden>
+      <p id="rating-prompt">Оцените привлекательность человека на фото</p>
+      <div id="scale" role="group" aria-labelledby="rating-prompt">
+        <button class="rating" type="button" data-rating="1" aria-pressed="false" aria-label="1, совершенно не привлекательный">1</button>
+        <button class="rating" type="button" data-rating="2" aria-pressed="false">2</button>
+        <button class="rating" type="button" data-rating="3" aria-pressed="false">3</button>
+        <button class="rating" type="button" data-rating="4" aria-pressed="false">4</button>
+        <button class="rating" type="button" data-rating="5" aria-pressed="false">5</button>
+        <button class="rating" type="button" data-rating="6" aria-pressed="false">6</button>
+        <button class="rating" type="button" data-rating="7" aria-pressed="false" aria-label="7, очень привлекательный">7</button>
+      </div>
+      <div id="binary-scale" role="group" aria-labelledby="rating-prompt" hidden>
+        <button class="binary-choice" type="button" data-choice="0" aria-pressed="false">Нет</button>
+        <button class="binary-choice" type="button" data-choice="1" aria-pressed="false">Да</button>
+      </div>
+      <p id="binary-help" class="help" hidden>1 - Нет · 2 - Да</p>
+      <div id="rating-anchors" class="anchors"><span>Совершенно<br>не привлекательный</span><span>Очень<br>привлекательный</span></div>
+    </div>
+  </section>
+  <section id="pause" hidden>
+    <div class="panel">
+      <h1>Исследование приостановлено</h1>
+      <p>Вернитесь к исследованию и продолжите, когда будете готовы.</p>
+      <div class="actions"><button id="resume">Продолжить исследование</button><button id="stop">Завершить и сохранить ответы</button></div>
+    </div>
+  </section>
+  <!-- Edit study-config below. In split blocks, total sets the block size; experimentalCount sets the experimental number.
+       Set experimentalRatio to a fraction (e.g. 0.25) to override experimentalCount, or leave it null to use the count.
+       Paste the deployed Google Apps Script /exec URL into sheetsUrl. All front-end code remains in this file. -->
+  <script id="study-config" type="application/json">
+{
+  "paradigm": "split",
+  "studyKey": "face20_80_short_ru_v2",
+  "trialCount": 30,
+  "practiceCount": 10,
+  "blocks": [
+    {
+      "id": "20",
+      "total": 20,
+      "experimentalCount": 20,
+      "experimentalRatio": null,
+      "ratingCount": 15
+    },
+    {
+      "id": "80",
+      "total": 80,
+      "experimentalCount": 20,
+      "experimentalRatio": null,
+      "ratingCount": 15
+    }
+  ],
+  "fixationMs": 2000,
+  "ratingMs": 4000,
+  "feedbackMs": 200,
+  "sheetsUrl": "",
+  "gallery": {
+    "durationMs": 1500,
+    "representation": "faceless-avatar",
+    "fixationAfterMs": 2500
+  },
+  "folders": {
+    "practice": "faces/{gender}/practice",
+    "experimental": "faces/{gender}/experiment images",
+    "control": "faces/{gender}/control images"
+  },
+  "github": {
+    "repository": "",
+    "ref": "",
+    "contentRoot": ""
+  },
+  "faceFiles": {
+    "male": [],
+    "female": []
+  },
+  "runMode": "test",
+  "acquaintanceMs": 7000
+}
+  </script>
+  <script>
+  'use strict';
+  (() => {
+    // Capture a pristine template before any UI or session changes. Setup rewrites only its config.
+    const template = '<!doctype html>\n' + document.documentElement.outerHTML;
+    const CONFIG = JSON.parse(document.getElementById('study-config').textContent);
+    for(const block of CONFIG.blocks) {
+      if(block.experimentalRatio !== null && block.experimentalRatio !== undefined) block.experimentalCount = Math.round(block.total * block.experimentalRatio);
+      if(!Number.isInteger(block.total) || block.total < 1 || !Number.isInteger(block.experimentalCount) || block.experimentalCount < 0 || block.experimentalCount > block.total) throw new Error('Некорректный размер блока или доля экспериментальных изображений.');
+    }
+    for(const block of CONFIG.blocks) {
+      block.ratingCount ??= block.total;
+      if(!Number.isInteger(block.ratingCount) || block.ratingCount<1 || block.ratingCount>block.total) throw new Error('Некорректное число оцениваемых фотографий.');
+    }
+    CONFIG.trialCount=CONFIG.blocks.reduce((sum,block)=>sum+block.ratingCount,0);
+    const $ = id => document.getElementById(id);
+    const buttons = [...document.querySelectorAll('.rating')];
+    const binaryButtons = [...document.querySelectorAll('.binary-choice')];
+    $('choose-preview-faces')?.addEventListener('click',()=> $('preview-faces').click());
+    $('choose-catalogue').addEventListener('click',()=> $('catalogue-input').click());
+    $('gender').addEventListener('invalid',()=> $('gender').setCustomValidity('Выберите пол.'));
+    $('gender').addEventListener('change',()=> $('gender').setCustomValidity(''));
+    const params = new URLSearchParams(location.search);
+    const makeId = () => window.crypto?.randomUUID?.() || Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    const isPreview = CONFIG.runMode === 'test' || (CONFIG.runMode !== 'deployment' && (location.protocol === 'file:' || params.get('preview') === '1'));
+    const previewFiles = new Map();
+    $('preview-controls').hidden=!isPreview;
+    $('preview-order-field').hidden=CONFIG.paradigm!=='split';
+    const orderOptions=$('preview-order').options;
+    orderOptions[0].textContent=CONFIG.blocks.map(block=>block.total).join(' / ');
+    orderOptions[1].textContent=[...CONFIG.blocks].reverse().map(block=>block.total).join(' / ');
+    $('preview-order').value=params.get('order')==='80/20'?'reverse':'forward';
+    const attemptKey = 'face-study-attempt:' + CONFIG.studyKey + ':' + (params.get('PROLIFIC_PID') || params.get('participant') || 'anonymous');
+    let sessionId;
+    try { sessionId=sessionStorage.getItem(attemptKey) || makeId();sessionStorage.setItem(attemptKey,sessionId); }
+    catch { sessionId=makeId(); }
+    const state = { phase: 'registration', block: 'practice', blockIndex: -1, trial: -1, faces: [], blockFaces: {}, blockTrialFaces: {}, allocationShown: false, galleries: {}, crossOnset: 0, galleryActual: 0, practiceFaces: [], rows: [], participant: null, phaseStart: 0, onset: 0, pausedAt: null, pausedTotal: 0, pauseEvents: [], lastRatingKey: null, active: false, starting: false, prepared: false };
+    let preparedCatalogue = null;
+    let frameId = null;
+    let localBackupAvailable = true;
+    const session = { version: '4.1', study_key: CONFIG.studyKey, paradigm: CONFIG.paradigm, is_preview: isPreview, condition_order: [], allocation_sequence: null, session_id: sessionId, started_at: null, completed_at: null, status: 'not_started', participant: null, trial_order: [], practice_trial_order: [], responses: state.rows, interruptions: state.pauseEvents, settings: {runMode: CONFIG.runMode, trialCount: CONFIG.trialCount, practiceCount: CONFIG.practiceCount, blocks: CONFIG.blocks, gallery: CONFIG.gallery, fixationMs: CONFIG.fixationMs, ratingMs: CONFIG.ratingMs, acquaintanceMs: CONFIG.acquaintanceMs, acquaintanceKeys: {no:1,yes:2}, skipAcquaintanceOnRatingTimeout:true, feedbackMs: CONFIG.feedbackMs}, prolific: {participant_id: params.get('PROLIFIC_PID'), study_id: params.get('STUDY_ID'), session_id: params.get('SESSION_ID')} };
+    function showPage(id) {
+      $('pages').hidden = false;
+      for (const name of ['registration', 'instructions', 'practice-ready', 'allocation', 'main-ready', 'complete', 'setup']) $(name).hidden = name !== id;
+      $('task').hidden = true;
+    }
+    function randomInt(maxExclusive) {
+      if (!window.crypto?.getRandomValues) return Math.floor(Math.random() * maxExclusive);
+      const bound = Math.floor(4294967296 / maxExclusive) * maxExclusive;
+      const value = new Uint32Array(1);
+      do { crypto.getRandomValues(value); } while (value[0] >= bound);
+      return value[0] % maxExclusive;
+    }
+    function shuffled(values) {
+      const copy = [...values];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = randomInt(i + 1);
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+    function encodePath(path) { return path.split('/').map(encodeURIComponent).join('/'); }
+    function uniqueEntries(entries) {
+      const paths = new Set(), content = new Set();
+      return entries.map(item => typeof item === 'string' ? {file: item} : item).filter(item => {
+        const hash = item?.sha256 || item?.content_hash;
+        if (!item || typeof item.file !== 'string' || !item.file || /(^|\/)\.\.?($|\/)|[\\?#]/.test(item.file) || paths.has(item.file) || (hash && content.has(hash))) return false;
+        paths.add(item.file);
+        if (hash) content.add(hash);
+        return true;
+      });
+    }
+    $('preview-faces')?.addEventListener('change',async event => {
+      if(!isPreview) return;
+      const continueButton=document.querySelector('#participant-form button');
+      continueButton.disabled=true;
+      $('preview-file-status').textContent='Чтение папки с фотографиями…';
+      try {
+        for(const file of previewFiles.values()) URL.revokeObjectURL(file.url);
+        previewFiles.clear();
+        const catalogue={male:[],female:[]};
+        for(const file of event.target.files) {
+          if(!/\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(file.name)) continue;
+          const parts=file.webkitRelativePath.split('/');
+          const group=parts.findIndex((part,index)=>index>0 && ['male','female'].includes(part));
+          if(group<0 || group===parts.length-1) continue;
+          const gender=parts[group],relative=parts.slice(group+1).join('/');
+          if(/(^|\/)\.\.?($|\/)|[\\?#]/.test(relative)) continue;
+          let sha256=null;
+          if(window.crypto?.subtle) {
+            const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());
+            sha256=[...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+          }
+          catalogue[gender].push({file:relative,...(sha256?{sha256}:{})});
+          previewFiles.set(`faces/${gender}/${relative}`,{url:URL.createObjectURL(file)});
+        }
+        CONFIG.faceFiles=catalogue;
+        $('preview-file-status').textContent=`Локально загружено фотографий: мужских - ${catalogue.male.length}, женских - ${catalogue.female.length}. Недостающие изображения будут заменены заглушками.`;
+      } catch {
+        $('preview-file-status').textContent='Не удалось прочитать папку. Выберите ее еще раз.';
+      } finally { continueButton.disabled=false; }
+    });
+    function loadImage(src) {
+      return new Promise(resolve => {
+        const image = new Image();
+        const timer = setTimeout(() => { image.onload = image.onerror = null; resolve(null); }, 5000);
+        image.onload = async () => {
+          clearTimeout(timer);
+          try { await image.decode(); } catch { /* onload already confirms a decoded image. */ }
+          resolve(image.naturalWidth > 0 ? image : null);
+        };
+        image.onerror = () => { clearTimeout(timer); resolve(null); };
+        let local=null;
+        if(isPreview && !/^(data:|blob:|https?:|file:)/.test(src)) {try {local=previewFiles.get(decodeURIComponent(src));} catch {}}
+        image.src = local ? local.url : src;
+      });
+    }
+    function placeholder(gender, number, block) {
+      const id = gender + '-' + block + '-placeholder-' + String(number).padStart(3, '0');
+      // Deliberately neutral empty placeholders: do not pretend these are experimental faces.
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 300 400"><rect width="300" height="400" fill="#e1e1e1"/><rect x="1" y="1" width="298" height="398" fill="none" stroke="#aaa"/><g fill="#555" font-family="Arial, sans-serif" text-anchor="middle"><text x="150" y="179" font-size="18">Изображение недоступно</text><text x="150" y="210" font-size="14">${gender==='male'?'Мужской':'Женский'} · ${block==='practice'?'Тест':block==='control'?'Контроль':block==='experimental'?'Эксперимент':'Основной блок'} · ${String(number).padStart(3, '0')}</text></g></svg>`;
+      return {id, file: null, src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), placeholder: true};
+    }
+    function githubLocation() {
+      const settings = CONFIG.github || {};
+      if (settings.repository) return {repository: settings.repository, root: settings.contentRoot || '', ref: settings.ref || ''};
+      const match = location.hostname.match(/^([a-z0-9-]+)\.github\.io$/i);
+      if (!match) return null;
+      const owner = match[1];
+      const directory = new URL('.', location.href).pathname.split('/').filter(Boolean).map(decodeURIComponent);
+      const repository = directory.length ? directory.shift() : owner + '.github.io';
+      return {repository: owner + '/' + repository, root: settings.contentRoot || directory.join('/'), ref: settings.ref || ''};
+    }
+    async function discoverFaces(gender, block, folderOverride) {
+      session.image_discovery ||= {};
+      const source = githubLocation();
+      if (!source || !/^[\w.-]+\/[\w.-]+$/.test(source.repository)) return null;
+      const root = source.root.replace(/^\/+|\/+$/g, '');
+      const locations = [{root, ref: source.ref}];
+      if (!source.ref) locations.push({root: ['docs', root].filter(Boolean).join('/'), ref: ''}, {root, ref: 'gh-pages'});
+      for (const candidate of locations) {
+        const folder = [candidate.root, 'faces', gender, folderOverride === undefined ? (block === 'practice' ? 'practice' : '') : folderOverride].filter(Boolean).join('/');
+        const url = `https://api.github.com/repos/${source.repository}/contents/${encodePath(folder)}` + (candidate.ref ? '?ref=' + encodeURIComponent(candidate.ref) : '');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
+        try {
+          const response = await fetch(url, {headers: {'Accept': 'application/vnd.github+json'}, signal: controller.signal});
+          if (response.status === 404) continue;
+          if (!response.ok) throw new Error('Ошибка поиска изображений GitHub: ' + response.status);
+          const listing = await response.json();
+          if (!Array.isArray(listing)) throw new Error('Ожидался список файлов GitHub');
+          session.image_discovery[block] = {method: 'github', repository: source.repository, root: candidate.root, ref: candidate.ref || 'default'};
+          return listing.filter(entry => entry.type === 'file' && /\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(entry.name)).map(entry => ({file: (folderOverride === undefined ? (block === 'practice' ? 'practice/' : '') : folderOverride + '/') + entry.name, content_hash: entry.sha ? 'git:' + entry.sha : null}));
+        } catch (error) {
+          console.warn('Автоматический поиск изображений недоступен:', error.message);
+          session.image_discovery_error = {...session.image_discovery_error, [block]: error.message};
+          return null;
+        } finally { clearTimeout(timeout); }
+      }
+      session.image_discovery[block] = {method: 'github', repository: source.repository, missing_folder: true};
+      return [];
+    }
+    async function prepareFaces(gender, block) {
+      session.image_discovery ||= {};
+      const count = block === 'practice' ? CONFIG.practiceCount : CONFIG.trialCount;
+      const prefix = block === 'practice' ? 'practice/' : '';
+      const embedded = CONFIG.faceFiles[gender] || [];
+      const configured = uniqueEntries(embedded.map(entry => typeof entry === 'string' ? {file: entry} : entry).filter(entry => typeof entry?.file === 'string' && entry.file.startsWith('practice/') === (block === 'practice')));
+      const discovered = embedded.length ? null : await discoverFaces(gender, block);
+      const fallback = Array.from({length: count}, (_, i) => ({file: prefix + String(i + 1).padStart(3, '0') + '.jpg'}));
+      if (embedded.length) session.image_discovery[block] = {method: 'embedded'};
+      else if (discovered === null) session.image_discovery[block] = {method: 'numbered_fallback'};
+      const usedHashes = new Set(block === 'main' ? state.practiceFaces.map(face => face.sha256 || face.content_hash).filter(Boolean) : []);
+      const entries = embedded.length ? configured : discovered === null ? fallback : discovered;
+      const candidates = shuffled(uniqueEntries(entries).filter(entry => !usedHashes.has(entry.sha256 || entry.content_hash)));
+      const valid = [];
+      // Load before any timed trial. Sampling is without replacement, including with >100 files.
+      for (let offset = 0; offset < candidates.length && valid.length < count; offset += 8) {
+        const batch = candidates.slice(offset, offset + 8);
+        const loaded = await Promise.all(batch.map(async entry => {
+          const file = `faces/${gender}/${entry.file}`;
+          const image = await loadImage(encodePath(file));
+          return image ? {id: file, file, src: image.src, placeholder: false, image, sha256: entry.sha256 || null, content_hash: entry.content_hash || null} : null;
+        }));
+        valid.push(...loaded.filter(Boolean));
+        $('loading-status').textContent = 'Подготовка фотографий…';
+      }
+      const selected = valid.slice(0, count);
+      for (let i = 1; selected.length < count; i++) selected.push(placeholder(gender, i, block));
+      await Promise.all(selected.filter(face => face.placeholder).map(async face => { face.image = await loadImage(face.src); }));
+      return shuffled(selected);
+    }
+    function blockConfig(id) { return CONFIG.blocks.find(block => block.id === id); }
+    function currentFaces() { return state.block === 'practice' ? state.practiceFaces : state.blockTrialFaces[state.block]; }
+    function mainTotal() { return CONFIG.blocks.reduce((sum,block) => sum + block.ratingCount,0); }
+    function poolPrefix(pool) { return CONFIG.folders[pool].replace(/^faces\/\{gender\}\//,''); }
+    async function preparePool(gender, pool, count, excluded = []) {
+      if(count===0) return [];
+      const prefix = poolPrefix(pool);
+      const embedded = CONFIG.faceFiles[gender] || [];
+      const entries = embedded.length ? uniqueEntries(embedded.map(entry=>typeof entry==='string'?{file:entry}:entry).filter(entry => typeof entry?.file==='string' && entry.file.startsWith(prefix + '/') && !entry.file.slice(prefix.length + 1).includes('/'))) : await discoverFaces(gender,pool,prefix);
+      const fallback = Array.from({length:count},(_,i) => ({file:prefix + '/' + String(i+1).padStart(3,'0') + '.jpg'}));
+      const blockedPaths = new Set(excluded.map(face => face.file).filter(Boolean));
+      const blockedHashes = new Set(excluded.map(face => face.sha256 || face.content_hash).filter(Boolean));
+      const candidates = shuffled(uniqueEntries(entries === null ? fallback : entries).filter(entry => !blockedPaths.has(`faces/${gender}/${entry.file}`) && !blockedHashes.has(entry.sha256 || entry.content_hash)));
+      const valid = [];
+      for (let offset=0; offset<candidates.length && valid.length<count; offset+=8) {
+        const loaded = await Promise.all(candidates.slice(offset,offset+8).map(async entry => {
+          const file = `faces/${gender}/${entry.file}`;
+          const image = await loadImage(encodePath(file));
+          return image ? {id:file,file,src:image.src,image,placeholder:false,category:pool,sha256:entry.sha256 || null,content_hash:entry.content_hash || null} : null;
+        }));
+        valid.push(...loaded.filter(Boolean));
+      }
+      const selected = valid.slice(0,count);
+      for(let i=1;selected.length<count;i++) selected.push({...placeholder(gender,i,pool),category:pool});
+      await Promise.all(selected.filter(face => face.placeholder).map(async face => face.image = await loadImage(face.src)));
+      return shuffled(selected);
+    }
+    async function prepareSplit(gender) {
+      const experimentalCount = CONFIG.blocks.reduce((sum,block) => sum + block.experimentalCount,0);
+      const controlCount = CONFIG.blocks.reduce((sum,block) => sum + block.total - block.experimentalCount,0);
+      const experimental = await preparePool(gender,'experimental',experimentalCount,state.practiceFaces);
+      const control = await preparePool(gender,'control',controlCount,state.practiceFaces.concat(experimental));
+      let expOffset=0, controlOffset=0;
+      for(const block of CONFIG.blocks) {
+        const controls = block.total-block.experimentalCount;
+        state.blockFaces[block.id] = shuffled(experimental.slice(expOffset,expOffset+block.experimentalCount).concat(control.slice(controlOffset,controlOffset+controls)));
+        state.blockTrialFaces[block.id]=state.blockFaces[block.id].slice(0,block.ratingCount);
+        expOffset += block.experimentalCount; controlOffset += controls;
+      }
+    }
+    function avatarThumbnail(gender) {
+      // Generic inline silhouettes: no study photograph or facial features are used.
+      const hair = gender === 'female'
+        ? '<path d="M31 67V43C31 22 41 13 50 13S69 22 69 43V67Z" fill="#888"/>'
+        : '<path d="M34 37C32 19 42 14 50 14S68 19 66 37Z" fill="#888"/>';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 125"><rect width="100" height="125" fill="#e7e7e7"/>${hair}<path d="M41 57H59V76H41Z" fill="#bdbdbd"/><path d="M17 117V96C17 81 29 73 41 70L50 75L59 70C71 73 83 81 83 96V117Z" fill="#999"/><ellipse cx="50" cy="43" rx="16" ry="23" fill="#ccc"/></svg>`;
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    }
+    function prepareGalleries() {
+      if(CONFIG.paradigm !== 'split') return;
+      const avatar = avatarThumbnail(state.participant.face_gender);
+      for(const block of CONFIG.blocks) {
+        const faces = state.blockFaces[block.id];
+        let rows=Math.floor(Math.sqrt(faces.length));
+        while(rows>1 && faces.length%rows!==0) rows--;
+        let columns=faces.length/rows;
+        if(columns/rows>1.6) {columns=Math.ceil(Math.sqrt(faces.length));rows=Math.ceil(faces.length/columns);}
+        const grid = document.createElement('div');
+        grid.className='gallery-grid';grid.style.setProperty('--columns',String(columns));grid.style.setProperty('--rows',String(rows));
+        session.gallery_layouts ||= {};session.gallery_layouts[block.id]={columns,rows};
+        const tiles=[];
+        faces.forEach((face,index) => {
+          const tile=document.createElement('div');tile.className='gallery-tile';tile.dataset.index=String(index);
+          const img=document.createElement('img');img.alt=state.participant.face_gender==='male'?'Мужской аватар без лица':'Женский аватар без лица';img.src=avatar;
+          tile.append(img);grid.append(tile);tiles.push(tile);
+        });
+        for(let i=faces.length;i<columns*rows;i++) {const empty=document.createElement('div');empty.className='gallery-empty';grid.append(empty);}
+        state.galleries[block.id]={grid,tiles};
+      }
+    }
+    function showGallery() {
+      const gallery=state.galleries[state.block];
+      $('gallery').replaceChildren(gallery.grid);
+      gallery.tiles.forEach((tile,index) => {const current=index===state.blockFaces[state.block].findIndex(face=>face.id===currentFaces()[state.trial].id);tile.classList.toggle('current',current);tile.setAttribute('aria-current',current?'true':'false');});
+      $('gallery-count').textContent=$('trial-count').textContent;
+      $('gallery-stage').hidden=false;
+      $('gallery').hidden=false;$('stimulus').hidden=true;
+    }
+    function hideGallery() { $('gallery-stage').hidden=true;$('gallery').hidden=true;$('stimulus').hidden=false; }
+    function blockReady() {
+      const index = state.block === 'practice' ? 0 : state.blockIndex+1;
+      if(index >= session.condition_order.length) { finishStudy(false);return; }
+      if(index===0 && CONFIG.paradigm==='split' && !state.allocationShown) {
+        state.allocationShown=true;state.phase='allocation';
+        $('group-size-first').textContent=blockConfig(session.condition_order[0]).total;
+        $('group-size-second').textContent=blockConfig(session.condition_order[1]).total;
+        checkpoint();showPage('allocation');$('allocation-continue').focus();return;
+      }
+      state.blockIndex=index;
+      const block=blockConfig(session.condition_order[index]);
+      state.phase='main-ready';
+      $('main-heading').textContent=`Начало ${index+1} блока эксперимента`;
+      $('group-transition').hidden=index===0;
+      $('main-description').textContent=`Размер группы в ${index+1} блоке: ${block.total} человек`;
+      $('main-start').textContent='Начать блок';
+      checkpoint();showPage('main-ready');$('main-start').focus();
+    }
+
+    $('participant-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!event.currentTarget.reportValidity()) return;
+      const gender = $('gender').value;
+      if (!['male','female'].includes(gender)) return;
+      const faceGender = gender === 'male' ? 'female' : 'male';
+      if (!['male', 'female'].includes(faceGender)) return;
+      state.participant = {id: params.get('PROLIFIC_PID') || params.get('participant') || sessionId, gender, face_gender: faceGender, session: params.get('session') || '001'};
+      session.participant = state.participant;
+      state.phase = 'instructions';
+      showPage('instructions');
+      try {
+        state.practiceFaces = await prepareFaces(faceGender, 'practice');
+        state.practiceFaces.forEach(face => face.category='practice');
+        if(CONFIG.paradigm === 'split') await prepareSplit(faceGender);
+        else { state.faces=await prepareFaces(faceGender,'main');state.faces.forEach(face=>face.category='main');state.blockFaces.main=state.faces;state.blockTrialFaces.main=state.faces; }
+        prepareGalleries();
+        session.practice_trial_order = state.practiceFaces.map(face => ({face_id: face.id, face_file: face.file, is_placeholder: face.placeholder}));
+        session.block_trial_orders=Object.fromEntries(Object.entries(state.blockTrialFaces).map(([id,faces]) => [id,faces.map(face=>({face_id:face.id,face_file:face.file,is_placeholder:face.placeholder,image_category:face.category}))]));
+        session.group_face_orders=Object.fromEntries(Object.entries(state.blockFaces).map(([id,faces])=>[id,faces.map(face=>face.id)]));
+        session.trial_order=Object.values(session.block_trial_orders).flat();
+        session.practice_placeholder_count = state.practiceFaces.filter(face => face.placeholder).length;
+        session.placeholder_count = Object.values(state.blockFaces).flat().filter(face => face.placeholder).length;
+        state.prepared = true;
+        $('loading-status').textContent = 'Все готово. Прочитайте инструкцию перед началом.';
+        $('start').disabled = false;
+        if(state.phase==='practice-ready') $('start').focus();
+      } catch (error) {
+        $('loading-status').textContent = 'Не удалось подготовить исследование. Обновите страницу и попробуйте еще раз.';
+        console.error(error);
+      }
+    });
+    // A logical monotonic clock excludes interruptions rather than silently skipping faces.
+    function now() { return performance.now() - state.pausedTotal - (state.pausedAt === null ? 0 : performance.now() - state.pausedAt); }
+    function checkpoint() {
+      session.practice_completed_trials = state.rows.filter(row => row.block === 'practice' && row.trial_complete).length;
+      session.main_completed_trials = state.rows.filter(row => row.block !== 'practice' && row.trial_complete).length;
+      session.initiated_trials = state.rows.length;
+      session.completed_trials = state.rows.filter(row => row.trial_complete).length;
+      try { localStorage.setItem('face-rating:' + sessionId, JSON.stringify(session)); }
+      catch { localBackupAvailable = false; }
+    }
+    async function startStudy() {
+      if (!state.prepared || state.active || state.starting || state.phase !== 'practice-ready') return;
+      state.starting=true;
+      $('start').disabled=true;
+      $('loading-status').textContent='Подготовка сеанса исследования…';
+      try { await allocateOrder(); }
+      catch(error) { $('loading-status').textContent=error.message+' Повторите попытку после восстановления соединения.';$('start').disabled=false;return; }
+      finally { state.starting=false; }
+      session.trial_order=session.condition_order.flatMap(id=>session.block_trial_orders[id]);
+      state.active = true;
+      session.started_at = new Date().toISOString();
+      session.status = 'in_progress';
+      $('pages').hidden = true;
+      $('task').hidden = false;
+      $('start').blur();
+      // Fullscreen is optional: a rejection must never prevent participation.
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+      nextTrial();
+      checkpoint();
+      frameId = requestAnimationFrame(tick);
+      if (document.hidden) pauseStudy('hidden');
+    }
+    function nextTrial() {
+      state.trial++;
+      const faces = currentFaces();
+      if (state.trial >= faces.length) {
+        blockReady();
+        return;
+      }
+      state.phase = 'fixation';
+      state.phaseStart = now();
+      state.crossOnset=state.phaseStart;state.galleryActual=0;
+      $('face').hidden = true;
+      $('fixation').hidden = false;
+      $('response').hidden = true;
+      for (const button of [...buttons,...binaryButtons]) { button.classList.remove('selected'); button.setAttribute('aria-pressed', 'false'); button.disabled = true; }
+      $('face').src = faces[state.trial].src;
+      const galleryEnabled=CONFIG.paradigm==='split' && state.block!=='practice';
+      $('trial-count').hidden=!galleryEnabled;
+      if(galleryEnabled) { $('trial-count').textContent=`${state.trial+1} / ${blockConfig(state.block).total}`;state.crossOnset=null;showGallery(); }
+      else hideGallery();
+    }
+    function startMain() {
+      if (!state.active || state.phase !== 'main-ready' || state.pausedAt !== null) return;
+      state.block = session.condition_order[state.blockIndex];
+      state.trial = -1;
+      session.main_started_at ||= new Date().toISOString();
+      session.block_started_at ||= {};session.block_started_at[state.block]=new Date().toISOString();
+      $('pages').hidden = true;
+      $('task').hidden = false;
+      $('main-start').blur();
+      nextTrial();
+      checkpoint();
+    }
+    function showFace() {
+      hideGallery();
+      $('fixation').hidden = true;
+      $('face').hidden = false;
+      $('response').hidden = false;
+      $('rating-prompt').textContent='Оцените привлекательность человека на фото';
+      $('scale').hidden=false;$('rating-anchors').hidden=false;
+      $('binary-scale').hidden=true;$('binary-help').hidden=true;
+      for (const button of buttons) button.disabled = false;
+      state.phase = 'rating';
+      state.phaseStart = state.onset = now();
+    }
+    function recordResponse(rating, input, responseTime) {
+      if (!state.active || state.phase !== 'rating' || state.pausedAt !== null) return;
+      const elapsed = responseTime - state.onset;
+      if (rating !== null && elapsed >= CONFIG.ratingMs) { recordResponse(null, 'timeout', responseTime); return; }
+      const face = currentFaces()[state.trial];
+      const condition = state.block === 'practice' ? null : blockConfig(state.block);
+      state.rows.push({session_id: sessionId, participant: state.participant.id, session: state.participant.session, gender: state.participant.gender, face_gender: state.participant.face_gender, allocation_sequence: session.allocation_sequence, condition_order: session.condition_order.join('/'), block: state.block, block_position: condition ? state.blockIndex+1 : 0, condition_size: condition ? condition.total : CONFIG.practiceCount, condition_experimental_count: condition ? condition.experimentalCount : null, image_category: face.category, trial: state.trial + 1, trial_global: state.rows.length + 1, face_id: face.id, face_file: face.file, is_placeholder: face.placeholder, acquaintance_choice:null, acquaintance_rt_ms:null, acquaintance_timed_out:null, acquaintance_input:null, acquaintance_completed:false, acquaintance_skipped:false, acquaintance_response_window_actual_ms:null, trial_complete:false, rating, rt_ms: rating === null ? null : Math.round(elapsed * 1000) / 1000, timed_out: rating === null, input, pre_face_interval_ms: Math.round((state.onset - state.phaseStartFixation)*1000)/1000, gallery_actual_ms: Math.round(state.galleryActual*1000)/1000, fixation_cross_actual_ms: Math.round((state.onset-(state.crossOnset ?? state.onset))*1000)/1000, fixation_actual_ms: Math.round((state.onset-(state.crossOnset ?? state.onset))*1000)/1000, response_window_actual_ms: Math.round(elapsed * 1000) / 1000, interruptions: state.pauseEvents.filter(event => event.block === state.block && event.trial === state.trial + 1).length, timestamp: new Date().toISOString()});
+      if(rating===null) {
+        const row=state.rows[state.rows.length-1];
+        row.acquaintance_skipped=true;
+        row.acquaintance_input='skipped_attractiveness_timeout';
+        row.trial_complete=true;
+        checkpoint();nextTrial();return;
+      }
+      for (const button of buttons) {
+        const selected = Number(button.dataset.rating) === rating;
+        button.classList.toggle('selected', selected);
+        button.setAttribute('aria-pressed', String(selected));
+        button.disabled = true;
+      }
+      state.phase = 'attractiveness-feedback';
+      state.phaseStart = now();
+      checkpoint();
+    }
+    function showAcquaintance() {
+      $('rating-prompt').textContent='У Вас есть желание познакомиться с этим человеком?';
+      $('scale').hidden=true;$('rating-anchors').hidden=true;
+      $('binary-scale').hidden=false;$('binary-help').hidden=false;
+      for(const button of binaryButtons) {button.disabled=false;button.classList.remove('selected');button.setAttribute('aria-pressed','false');}
+      state.phase='acquaintance';state.acquaintanceOnset=state.phaseStart=now();
+    }
+    function recordAcquaintance(choice,input,responseTime) {
+      if(!state.active || state.phase!=='acquaintance' || state.pausedAt!==null) return;
+      const elapsed=responseTime-state.acquaintanceOnset;
+      if(choice!==null && elapsed>=CONFIG.acquaintanceMs) {recordAcquaintance(null,'timeout',responseTime);return;}
+      const row=state.rows[state.rows.length-1];
+      row.acquaintance_choice=choice;row.acquaintance_rt_ms=choice===null?null:Math.round(elapsed*1000)/1000;
+      row.acquaintance_timed_out=choice===null;row.acquaintance_input=input;
+      row.acquaintance_response_window_actual_ms=Math.round(elapsed*1000)/1000;
+      row.acquaintance_completed=true;row.trial_complete=true;
+      row.interruptions=state.pauseEvents.filter(event=>event.block===state.block && event.trial===state.trial+1).length;
+      if(choice===null) {checkpoint();nextTrial();return;}
+      for(const button of binaryButtons) {
+        const selected=Number(button.dataset.choice)===choice;
+        button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));button.disabled=true;
+      }
+      state.phase='feedback';state.phaseStart=now();checkpoint();
+    }
+    function preFaceDuration() {
+      return CONFIG.paradigm==='split' && state.block!=='practice' ? CONFIG.gallery.durationMs+CONFIG.gallery.fixationAfterMs : CONFIG.fixationMs;
+    }
+    function tick() {
+      if (!state.active) return;
+      if (state.pausedAt === null) {
+        const time = now();
+        if(state.phase==='fixation' && !$('gallery').hidden && time-state.phaseStart>=Math.min(CONFIG.gallery.durationMs,preFaceDuration())) {
+          state.galleryActual=time-state.phaseStart;state.crossOnset=time;hideGallery();
+        }
+        if (state.phase === 'fixation' && time - state.phaseStart >= preFaceDuration()) {
+          state.phaseStartFixation = state.phaseStart;
+          showFace();
+        } else if (state.phase === 'rating' && time - state.onset >= CONFIG.ratingMs) recordResponse(null, 'timeout', time);
+        else if(state.phase==='attractiveness-feedback' && time-state.phaseStart>=CONFIG.feedbackMs) showAcquaintance();
+        else if(state.phase==='acquaintance' && time-state.acquaintanceOnset>=CONFIG.acquaintanceMs) recordAcquaintance(null,'timeout',time);
+        else if (state.phase === 'feedback' && time - state.phaseStart >= CONFIG.feedbackMs) nextTrial();
+      }
+      if (state.active) frameId = requestAnimationFrame(tick);
+    }
+    for (const button of buttons) button.addEventListener('click', () => recordResponse(Number(button.dataset.rating), 'mouse', now()));
+    for(const button of binaryButtons) button.addEventListener('click',()=>recordAcquaintance(Number(button.dataset.choice),'mouse',now()));
+    function showPracticeInstructions() {if(state.phase!=='instructions') return;state.phase='practice-ready';showPage('practice-ready');if(state.prepared) $('start').focus();}
+    $('instructions-continue').addEventListener('click',showPracticeInstructions);
+    $('allocation-continue').addEventListener('click',()=>{if(state.phase==='allocation') blockReady();});
+    $('start').addEventListener('click', startStudy);
+    $('main-start').addEventListener('click', startMain);
+    document.addEventListener('keydown', event => {
+      if (event.repeat) return;
+      if(state.phase==='instructions' && event.code==='Space') {event.preventDefault();showPracticeInstructions();}
+      else if(state.phase==='allocation' && event.code==='Space') {event.preventDefault();blockReady();}
+      else if (state.phase === 'practice-ready' && event.code === 'Space' && state.prepared) { event.preventDefault(); startStudy(); }
+      else if (state.phase === 'main-ready' && event.code === 'Space') { event.preventDefault(); startMain(); }
+      else if (state.active && event.key === 'Escape') { event.preventDefault(); pauseStudy('escape'); }
+      else if(state.active && state.phase==='acquaintance' && state.pausedAt===null && ['1','2'].includes(event.key)) {
+        if(state.lastRatingKey!==null) return;state.lastRatingKey=event.code;event.preventDefault();
+        recordAcquaintance(event.key==='2'?1:0,'keyboard',now());
+      }
+      else if (state.active && state.phase === 'rating' && state.pausedAt === null && /^[1-7]$/.test(event.key)) {
+        // A held key cannot carry a response into the next trial.
+        if (state.lastRatingKey !== null) return;
+        state.lastRatingKey = event.code;
+        event.preventDefault();
+        recordResponse(Number(event.key), 'keyboard', now());
+      }
+    });
+    document.addEventListener('keyup', event => { if (state.lastRatingKey === event.code) state.lastRatingKey = null; });
+    function pauseStudy(reason) {
+      if (!state.active || state.pausedAt !== null) return;
+      state.pausedAt = performance.now();
+      state.pauseEvents.push({block: state.block, trial: state.trial + 1, phase: state.phase, reason, started_at: new Date().toISOString(), duration_ms: null});
+      $('pause').hidden = false;
+      checkpoint();
+    }
+    function resumeStudy() {
+      if (!state.active || state.pausedAt === null || document.hidden) return;
+      const duration = performance.now() - state.pausedAt;
+      state.pausedTotal += duration;
+      state.pauseEvents[state.pauseEvents.length - 1].duration_ms = Math.round(duration);
+      state.pausedAt = null;
+      state.lastRatingKey = null;
+      $('pause').hidden = true;
+      $('resume').blur();
+      checkpoint();
+    }
+    document.addEventListener('visibilitychange', () => { if (document.hidden) pauseStudy('hidden'); });
+    $('resume').addEventListener('click', resumeStudy);
+    $('stop').addEventListener('click', () => finishStudy(true));
+    window.addEventListener('beforeunload', event => { if (state.active) { event.preventDefault(); event.returnValue = ''; } });
+    function download(text, name, type) {
+      const url = URL.createObjectURL(new Blob([text], {type}));
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+    const columns = ['session_id','participant','session','gender','face_gender','allocation_sequence','condition_order','block','block_position','condition_size','condition_experimental_count','image_category','trial','trial_global','face_id','face_file','is_placeholder','rating','rt_ms','timed_out','input','pre_face_interval_ms','gallery_actual_ms','fixation_cross_actual_ms','fixation_actual_ms','response_window_actual_ms','interruptions','timestamp','acquaintance_choice','acquaintance_rt_ms','acquaintance_timed_out','acquaintance_input','acquaintance_completed','acquaintance_response_window_actual_ms','trial_complete','acquaintance_skipped'];
+    const CSV_HEADERS_RU = {"session_key": "Ключ сеанса", "session_id": "Сеанс", "study_key": "Исследование", "paradigm": "Парадигма", "allocation_sequence": "Номер распределения", "order_json": "Порядок блоков (JSON)", "allocated_at": "Время распределения", "participant": "Участник", "gender": "Пол участника", "face_gender": "Пол на фотографиях", "status": "Статус", "started_at": "Начало", "completed_at": "Окончание", "saved_at": "Время сохранения", "save_token": "Ключ подтверждения", "response_count": "Число проб", "practice_count": "Тестовые пробы", "main_count": "Основные пробы", "block_counts_json": "Число проб по блокам (JSON)", "trial_row_start": "Начальная строка данных", "trial_row_capacity": "Число зарезервированных строк", "metadata_json": "Метаданные (JSON)", "condition_order": "Порядок условий", "block": "Блок", "block_position": "Позиция блока", "condition_size": "Размер группы", "condition_experimental_count": "Экспериментальных лиц в группе", "trial": "Проба в блоке", "trial_global": "Проба в сеансе", "image_category": "Категория изображения", "face_id": "Код лица", "face_file": "Файл лица", "is_placeholder": "Заглушка", "rating": "Привлекательность (1-7)", "rt_ms": "Время ответа: привлекательность (мс)", "timed_out": "Пропуск: привлекательность", "input": "Способ ответа: привлекательность", "pre_face_interval_ms": "Интервал перед лицом (мс)", "gallery_actual_ms": "Обзор (мс)", "fixation_cross_actual_ms": "Крест (мс)", "fixation_actual_ms": "Фиксация (мс)", "response_window_actual_ms": "Окно ответа: привлекательность (мс)", "interruptions": "Приостановки", "timestamp": "Время пробы", "acquaintance_choice": "Знакомство (0 - Нет, 1 - Да)", "acquaintance_rt_ms": "Время ответа: знакомство (мс)", "acquaintance_timed_out": "Пропуск: знакомство", "acquaintance_input": "Способ ответа: знакомство", "acquaintance_completed": "Вопрос о знакомстве завершен", "acquaintance_response_window_actual_ms": "Окно ответа: знакомство (мс)", "trial_complete": "Проба завершена", "acquaintance_skipped": "Вопрос о знакомстве пропущен"};
+    function csvCell(value) {
+      let text = value === null || value === undefined ? '' : String(value);
+      // Avoid executing participant IDs or filenames as spreadsheet formulas.
+      if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+      return '"' + text.replace(/"/g, '""') + '"';
+    }
+    function saveCSV() { download('\uFEFF' + [columns.map(column=>csvCell(CSV_HEADERS_RU[column] || column)).join(','), ...state.rows.map(row => columns.map(column => csvCell(row[column])).join(','))].join('\r\n'), 'face-ratings-' + sessionId + '.csv', 'text/csv;charset=utf-8'); }
+    function saveJSON() { download(JSON.stringify(session, null, 2), 'face-ratings-' + sessionId + '.json', 'application/json'); }
+    $('download-csv').addEventListener('click', saveCSV);
+    $('download-json').addEventListener('click', saveJSON);
+    function sheetsCall(action, extra = {}) {
+      return new Promise((resolve, reject) => {
+        if (!CONFIG.sheetsUrl) { reject(new Error('Сбор ответов еще не настроен.')); return; }
+        const callback = 'faceSheets_' + makeId().replace(/[^A-Za-z0-9_]/g, '');
+        const script = document.createElement('script');
+        const url = new URL(CONFIG.sheetsUrl);
+        Object.entries({action,study_key:CONFIG.studyKey,session_id:sessionId,callback,_:Date.now(),...extra}).forEach(([key,value]) => url.searchParams.set(key,String(value)));
+        const cleanup = () => { clearTimeout(timer); script.remove(); delete window[callback]; };
+        const timer = setTimeout(() => { cleanup(); reject(new Error('Сервер не ответил.')); },30000);
+        window[callback] = result => { cleanup(); result?.ok ? resolve(result) : reject(new Error(result?.error || 'Ошибка сервера.')); };
+        script.onerror = () => { cleanup(); reject(new Error('Не удалось подключиться к серверу.')); };
+        script.src = url.href;
+        document.head.append(script);
+      });
+    }
+    async function allocateOrder() {
+      const ids = CONFIG.blocks.map(block => block.id);
+      if (isPreview || (!CONFIG.sheetsUrl && CONFIG.paradigm === 'continuous' && CONFIG.runMode !== 'deployment')) {
+        const reverse = isPreview && $('preview-order').value === 'reverse';
+        session.condition_order = reverse ? [...ids].reverse() : ids;
+        session.allocation_sequence = null;
+        return;
+      }
+      if (!CONFIG.sheetsUrl) throw new Error('Исследование еще не настроено. Обратитесь к исследователю.');
+      const allocation = await sheetsCall('allocate');
+      if (!Array.isArray(allocation.order) || allocation.order.length !== ids.length || new Set(allocation.order).size !== ids.length || allocation.order.some(id => !ids.includes(id))) throw new Error('Сервер вернул несовместимый порядок блоков.');
+      session.condition_order = allocation.order;
+      session.allocation_sequence = allocation.sequence;
+    }
+    let pendingSave = null, saving = false;
+    async function submitResults() {
+      if (!CONFIG.sheetsUrl || isPreview || saving) return;
+      saving = true;
+      $('retry-submit').hidden = true;
+      $('save-status').textContent = 'Сохранение ответов… Не закрывайте страницу.';
+      if (!pendingSave) pendingSave = {action:'save',save_token:makeId(),session:JSON.parse(JSON.stringify(session))};
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(),30000);
+      try {
+        // Apps Script receives a simple POST; JSONP status confirms the opaque cross-origin response.
+        await fetch(CONFIG.sheetsUrl,{method:'POST',mode:'no-cors',credentials:'omit',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(pendingSave),signal:controller.signal});
+        let saved = false;
+        for (let attempt=0; attempt<10; attempt++) {
+          const status = await sheetsCall('status',{save_token:pendingSave.save_token});
+          if (status.saved && status.response_count === pendingSave.session.responses.length) { saved = true; break; }
+          await new Promise(resolve => setTimeout(resolve,500));
+        }
+        if (!saved) throw new Error('Сохранение не подтверждено.');
+        $('save-status').textContent = 'Ваши ответы сохранены в таблице исследования.';
+      } catch {
+        $('save-status').textContent = 'Не удалось подтвердить сохранение. Повторите попытку или сохраните копию с помощью кнопок ниже.';
+        $('retry-submit').hidden = false;
+      } finally { clearTimeout(timeout); saving = false; }
+    }
+    $('retry-submit').addEventListener('click', submitResults);
+    function finishStudy(partial) {
+      if (!state.active) return;
+      if (state.pausedAt !== null) {
+        state.pauseEvents[state.pauseEvents.length - 1].duration_ms = Math.round(performance.now() - state.pausedAt);
+        state.pausedAt = null;
+      }
+      state.active = false;
+      state.phase = 'complete';
+      cancelAnimationFrame(frameId);
+      session.status = partial ? 'partial' : 'complete';
+      session.completed_at = new Date().toISOString();
+      session.initiated_trials = state.rows.length;
+      session.completed_trials = state.rows.filter(row => row.trial_complete).length;
+      checkpoint();
+      $('pause').hidden = true;
+      showPage('complete');
+      $('completion-message').textContent = partial ? `Исследование завершено. Выполнено тестовых проб: ${session.practice_completed_trials} из ${CONFIG.practiceCount}; основных: ${session.main_completed_trials} из ${mainTotal()}.` : 'Вы завершили исследование.';
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      try { sessionStorage.removeItem(attemptKey); } catch {}
+      if (CONFIG.sheetsUrl && !isPreview) submitResults();
+      else {
+        $('save-status').textContent = localBackupAvailable ? 'Копия ответов сохранена на этом устройстве. Начато скачивание CSV; если файл не появился, нажмите кнопку ниже.' : 'Сохраните ответы с помощью кнопок ниже.';
+        saveCSV();
+      }
+    }
+    // Researcher setup accepts arbitrary filenames while keeping the deployed app to one HTML.
+    $('submission-url').value = CONFIG.sheetsUrl || '';
+    $('submission-url').addEventListener('input',()=> { $('build-index').disabled=false; });
+    if(CONFIG.sheetsUrl) $('build-index').disabled=false;
+    $('catalogue-input').addEventListener('change', async event => {
+      $('build-index').disabled = true;
+      $('setup-status').textContent = 'Чтение имен файлов…';
+      const files = [...event.target.files].filter(file => /\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(file.name));
+      const catalogue = {male: [], female: []};
+      let duplicates = 0, skipped = 0;
+      const seen = {male: {main: new Set(), practice: new Set(), experimental: new Set(), control: new Set()}, female: {main: new Set(), practice: new Set(), experimental: new Set(), control: new Set()}};
+      for (const file of files) {
+        const parts = file.webkitRelativePath.split('/');
+        const groupIndex = parts.findIndex((part, i) => i > 0 && ['male','female'].includes(part));
+        if (groupIndex < 0 || groupIndex === parts.length - 1) { skipped++; continue; }
+        const gender = parts[groupIndex];
+        const relative = parts.slice(groupIndex + 1).join('/');
+        const block = relative.startsWith('practice/') ? 'practice' : CONFIG.paradigm==='split' && relative.startsWith(poolPrefix('experimental')+'/') ? 'experimental' : CONFIG.paradigm==='split' && relative.startsWith(poolPrefix('control')+'/') ? 'control' : 'main';
+        if(CONFIG.paradigm==='split' && block==='main') {skipped++;continue;}
+        if (/(^|\/)\.\.?($|\/)|[\\?#]/.test(relative)) { skipped++; continue; }
+        let sha256 = null;
+        if (window.crypto?.subtle) {
+          const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+          sha256 = [...new Uint8Array(hash)].map(x => x.toString(16).padStart(2, '0')).join('');
+        }
+        const identity = sha256 || relative;
+        if (seen[gender][block].has(identity)) { duplicates++; continue; }
+        seen[gender][block].add(identity);
+        catalogue[gender].push({file: relative, ...(sha256 ? {sha256} : {})});
+      }
+      preparedCatalogue = catalogue;
+      const summary = ['male','female'].map(gender => {
+        const practice = catalogue[gender].filter(entry => entry.file.startsWith('practice/'));
+        const practiceHashes = new Set(practice.map(entry => entry.sha256).filter(Boolean));
+        if(CONFIG.paradigm==='split') {
+          const experimental=catalogue[gender].filter(entry=>entry.file.startsWith(poolPrefix('experimental')+'/') && !practiceHashes.has(entry.sha256));
+          const experimentalHashes=new Set(experimental.map(entry=>entry.sha256).filter(Boolean));
+          const controls=catalogue[gender].filter(entry=>entry.file.startsWith(poolPrefix('control')+'/') && !practiceHashes.has(entry.sha256) && !experimentalHashes.has(entry.sha256));
+          const expNeeded=CONFIG.blocks.reduce((sum,block)=>sum+block.experimentalCount,0), controlNeeded=CONFIG.blocks.reduce((sum,block)=>sum+block.total,0)-expNeeded;
+          return `${gender==='male'?'Мужские':'Женские'}: ${experimental.length}/${expNeeded} экспериментальных, ${controls.length}/${controlNeeded} контрольных, ${practice.length}/${CONFIG.practiceCount} тестовых`+(experimental.length<expNeeded || controls.length<controlNeeded || practice.length<CONFIG.practiceCount?' (недостающие изображения будут заменены заглушками)':'');
+        }
+        const main = catalogue[gender].filter(entry => !entry.file.startsWith('practice/') && !practiceHashes.has(entry.sha256));
+        return `${gender==='male'?'Мужские':'Женские'}: ${main.length} основных, ${practice.length} тестовых` + (main.length < CONFIG.trialCount || practice.length < CONFIG.practiceCount ? ' (недостающие изображения будут заменены заглушками)' : '');
+      }).join('\n');
+      $('setup-status').textContent = summary + `\nПропущено одинаковых файлов: ${duplicates}; файлов вне ожидаемых папок: ${skipped}.` + (!window.crypto?.subtle ? '\nВ этом браузере недоступна проверка содержимого; исключаются только повторяющиеся пути.' : '');
+      $('build-index').disabled = false;
+    });
+    $('build-index').addEventListener('click', () => {
+      if (!$('submission-url').reportValidity()) return;
+      const config = {...CONFIG, faceFiles: preparedCatalogue || CONFIG.faceFiles, sheetsUrl: $('submission-url').value.trim()};
+      const encoded = JSON.stringify(config).replace(/</g, '\\u003c');
+      const html = template.replace(/(<script id="study-config" type="application\/json">)[\s\S]*?(<\/script>)/, (_, open, close) => open + '\n' + encoded + '\n  ' + close);
+      download(html, 'Index.html', 'text/html;charset=utf-8');
+    });
+    $('preview').addEventListener('click', () => { state.phase = 'registration'; showPage('registration'); });
+    function routeSetup() {
+      if (state.active || !['registration','setup'].includes(state.phase)) return;
+      if (location.hash === '#setup') { state.phase = 'setup'; showPage('setup'); }
+      else if (state.phase === 'setup') { state.phase = 'registration'; showPage('registration'); }
+    }
+    window.addEventListener('hashchange', routeSetup);
+    routeSetup();
+  })();
+  </script>
+</body>
+</html>
